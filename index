@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>客戶專用報表</title>
+  <style>
+    body { font-family: Arial; padding: 20px; background-color: #fafafa; }
+    h2 { color: #333; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background-color: #f0f0f0;
+    }
+    .highlight {
+      background-color: #d2e9ff;
+      font-weight: bold;
+    }
+    .avg-red {
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h2 id="reportTitle">📊 報表</h2>
+  <label>篩選 ID：
+    <select id="idFilter" onchange="filterTable()">
+      <option value="全部顯示">全部顯示</option>
+    </select>
+  </label>
+  <table id="sheetTable"></table>
+
+  <script>
+    // ====== 自動產生今日日期 ======
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    document.getElementById("reportTitle").textContent = `📊 ${yyyy}/${mm}/${dd} 客戶專用報表（皇鉅 專用）`;
+
+    // ====== Google Sheet 資料 ======
+    const sheetID = "1T9xYk46-pWDxm7tuwM63q8iSJfKOo5tB05QKsA5kGMk";
+    const sheetName = "Sheet5";
+    const url = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?sheet=${sheetName}`;
+
+    let allData = [];
+
+    fetch(url)
+      .then(res => res.text())
+      .then(rep => {
+        const data = JSON.parse(rep.substr(47).slice(0, -2));
+        allData = data.table.rows;
+        const table = document.getElementById("sheetTable");
+
+        // 產生標題列
+        const headers = data.table.cols.map(col => `<th>${col.label}</th>`).join("");
+        table.innerHTML = `<tr>${headers}</tr>`;
+
+        // 收集 ID（A欄是 ID）
+        const idSet = new Set();
+        allData.forEach(row => {
+          const id = row.c[0]?.v ?? "";
+          if (id && id !== "加總" && id !== "餘額") idSet.add(id);
+        });
+        const select = document.getElementById("idFilter");
+        idSet.forEach(id => {
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = id;
+          select.appendChild(opt);
+        });
+
+        renderTable("全部顯示");
+      });
+
+    // ====== 顯示表格內容 ======
+    function renderTable(filterID) {
+      const table = document.getElementById("sheetTable");
+      table.innerHTML = `<tr>
+        <th>ID</th><th>主題</th><th>狀態</th><th>預算</th><th>金額</th><th>表單</th><th>平均</th><th>客戶需求</th>
+      </tr>`;
+
+      allData.forEach(row => {
+        const id = row.c[0]?.v ?? "";
+
+        // 篩選
+        if (filterID !== "全部顯示" && id !== filterID) return;
+
+        let rowHTML = "";
+        row.c.forEach((cell, colIndex) => {
+          let value = cell?.v;
+
+          // 修正：強制轉換 undefined、null、空字串
+          if (typeof value === "undefined" || value === null) {
+            value = "";
+          } else if (typeof value === "number") {
+            value = Math.round(value); // 數字四捨五入
+          } else {
+            value = value.toString();  // 不管什麼型別，轉成文字
+          }
+
+          // 平均欄（G欄，index=6），超過 250 變紅
+          if (colIndex === 6 && !isNaN(value) && Number(value) > 250) {
+            rowHTML += `<td class="avg-red">${value}</td>`;
+          } else {
+            rowHTML += `<td>${value}</td>`;
+          }
+        });
+
+        // 特別行變色
+        const specialWords = ["加總", "餘額", "暱稱", "當月總金額", "總表單", "小計"];
+        const firstCell = row.c[0]?.v ?? row.c[1]?.v ?? "";
+        const isHighlight = specialWords.some(word => firstCell?.toString().includes(word));
+
+        if (isHighlight) {
+          table.innerHTML += `<tr class="highlight">${rowHTML}</tr>`;
+        } else {
+          table.innerHTML += `<tr>${rowHTML}</tr>`;
+        }
+      });
+    }
+
+    // ====== 篩選功能 ======
+    function filterTable() {
+      const selectedID = document.getElementById("idFilter").value;
+      renderTable(selectedID);
+    }
+  </script>
+</body>
+</html>
